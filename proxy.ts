@@ -5,7 +5,7 @@ export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 
   // If Supabase is not configured, skip auth middleware
   if (!supabaseUrl || !supabaseKey) {
@@ -17,24 +17,26 @@ export async function proxy(request: NextRequest) {
       getAll() {
         return request.cookies.getAll()
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet, headers) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
         supabaseResponse = NextResponse.next({ request })
         cookiesToSet.forEach(({ name, value, options }) =>
           supabaseResponse.cookies.set(name, value, options),
         )
+        // Apply cache-control headers to prevent CDN caching of auth responses
+        Object.entries(headers).forEach(([key, value]) =>
+          supabaseResponse.headers.set(key, value),
+        )
       },
     },
   })
 
-  // Refresh session if expired — required for Server Components
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // IMPORTANT: getClaims() validates the JWT signature on every call (safe for auth checks).
+  // Never use getSession() in the proxy — it reads from cookies without re-validating.
+  const { data } = await supabase.auth.getClaims()
+  const user = data?.claims
 
-  // Protect auth-required routes
   const { pathname } = request.nextUrl
-
   const protectedPaths = ['/dashboard', '/reviews', '/review', '/settings']
   const isProtected = protectedPaths.some(
     (p) => pathname === p || pathname.startsWith(p + '/'),
@@ -44,7 +46,12 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.searchParams.set('redirectTo', pathname)
-    return NextResponse.redirect(url)
+    // IMPORTANT: carry supabaseResponse cookies so auth token refresh is not lost
+    const redirectResponse = NextResponse.redirect(url)
+    supabaseResponse.cookies.getAll().forEach(({ name, value }) => {
+      redirectResponse.cookies.set(name, value)
+    })
+    return redirectResponse
   }
 
   return supabaseResponse
