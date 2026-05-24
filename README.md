@@ -1,36 +1,104 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI PR Reviewer
+
+Paste any git diff and get an instant, structured code review powered by Claude 3.5 Sonnet.
+
+## Features (Phase 1 — MVP)
+
+- Paste raw `git diff` output → streaming, per-file review
+- Issues ranked by severity: critical / warning / suggestion / info
+- Categories: bug, security, performance, maintainability, style
+- Parallel file processing — results stream in as they complete
+- Copy full review as markdown
+- Lock files, binaries, and generated code automatically skipped
 
 ## Getting Started
 
-First, run the development server:
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Set up environment variables
+
+```bash
+cp .env.local.example .env.local
+```
+
+Edit `.env.local` and add your Anthropic API key:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Get a key at [console.anthropic.com](https://console.anthropic.com/).
+
+### 3. Run the dev server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How to get a diff to paste
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+# Compare your branch to main
+git diff main
 
-## Learn More
+# Review the last commit
+git diff HEAD~1
 
-To learn more about Next.js, take a look at the following resources:
+# Review staged changes
+git diff --staged
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Or open any GitHub PR → **Files changed** tab → copy the raw diff.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project Structure
 
-## Deploy on Vercel
+```
+app/
+  page.tsx               ← Home page
+  layout.tsx             ← Root layout + metadata
+  api/
+    review/route.ts      ← Core: diff → Claude → SSE stream
+    health/route.ts      ← Health check endpoint
+components/
+  ReviewStream.tsx        ← SSE consumer + state machine
+  DiffInput.tsx           ← Diff textarea with paste helpers
+  FileReviewCard.tsx      ← Per-file review card
+  IssueItem.tsx           ← Individual issue display
+lib/
+  anthropic.ts            ← Claude API wrapper
+  diff-parser.ts          ← Unified diff parser
+  language-detector.ts    ← File extension → language name
+  file-filters.ts         ← Skip lock files, binaries, etc.
+  types.ts                ← Shared TypeScript types
+  utils.ts                ← cn() and helpers
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deployment (Vercel)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel
+
+# Set production env vars
+vercel env add ANTHROPIC_API_KEY production
+```
+
+## Roadmap
+
+| Phase | Status | Description |
+|---|---|---|
+| 1 — MVP | ✅ Done | Paste diff, get streaming review |
+| 2 — GitHub | Planned | PR URL input, OAuth, post review to GitHub |
+| 3 — Persistence | Planned | Review history, usage limits, Pro plan |
+| 4 — Automation | Planned | GitHub App, webhooks, REST API |
+
+See [full app plan](../../docs/planning/app-plan.md) for the complete feature roadmap.
