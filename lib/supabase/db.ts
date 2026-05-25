@@ -170,6 +170,188 @@ export async function deleteReview(db: DB, reviewId: string, userId: string): Pr
   await db.from('reviews').delete().eq('id', reviewId).eq('user_id', userId)
 }
 
+// ─── Cost Tracking ───────────────────────────────────────────────────────────
+
+export interface CostRecord {
+  review_id: string
+  user_id: string
+  model: string
+  file_path?: string
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number
+}
+
+export async function saveCost(db: DB, record: CostRecord): Promise<void> {
+  await db.from('review_costs').insert(record)
+}
+
+export async function saveCosts(db: DB, records: CostRecord[]): Promise<void> {
+  if (records.length === 0) return
+  await db.from('review_costs').insert(records)
+}
+
+export async function getMonthlyCost(
+  db: DB,
+  userId: string,
+): Promise<{ totalUsd: number; reviewCount: number }> {
+  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+  const { data } = await db
+    .from('review_costs')
+    .select('cost_usd, review_id')
+    .eq('user_id', userId)
+    .gte('created_at', startOfMonth)
+
+  const rows = (data as { cost_usd: number; review_id: string }[]) ?? []
+  const totalUsd = rows.reduce((sum, r) => sum + Number(r.cost_usd), 0)
+  const reviewCount = new Set(rows.map((r) => r.review_id)).size
+
+  return { totalUsd, reviewCount }
+}
+
+// ─── Team Rules ──────────────────────────────────────────────────────────────
+
+export interface TeamRule {
+  id?: string
+  user_id: string
+  repo_pattern: string
+  rule_text: string
+  enabled: boolean
+}
+
+export async function getUserRules(
+  db: DB,
+  userId: string,
+  repoPattern?: string,
+): Promise<TeamRule[]> {
+  let query = db
+    .from('team_rules')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('enabled', true)
+    .order('created_at', { ascending: true })
+
+  const { data } = await query
+  const rules = (data as TeamRule[]) ?? []
+
+  if (!repoPattern) return rules
+  return rules.filter(
+    (r) => r.repo_pattern === '*' || r.repo_pattern === repoPattern,
+  )
+}
+
+export async function createRule(db: DB, rule: Omit<TeamRule, 'id'>): Promise<TeamRule | null> {
+  const { data } = await db
+    .from('team_rules')
+    .insert(rule)
+    .select()
+    .single()
+  return data as TeamRule | null
+}
+
+export async function updateRule(
+  db: DB,
+  ruleId: string,
+  userId: string,
+  updates: Partial<Pick<TeamRule, 'rule_text' | 'repo_pattern' | 'enabled'>>,
+): Promise<void> {
+  await db
+    .from('team_rules')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', ruleId)
+    .eq('user_id', userId)
+}
+
+export async function deleteRule(db: DB, ruleId: string, userId: string): Promise<void> {
+  await db.from('team_rules').delete().eq('id', ruleId).eq('user_id', userId)
+}
+
+// ─── Repo Settings ───────────────────────────────────────────────────────────
+
+export interface RepoSettings {
+  id?: string
+  user_id: string
+  repo_name: string
+  path_includes: string[]
+  path_excludes: string[]
+  auto_review_enabled: boolean
+  models: string[]
+  webhook_secret?: string | null
+}
+
+export async function getRepoSettings(
+  db: DB,
+  userId: string,
+  repoName: string,
+): Promise<RepoSettings | null> {
+  const { data } = await db
+    .from('repo_settings')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('repo_name', repoName)
+    .single()
+  return (data as RepoSettings) ?? null
+}
+
+export async function listRepoSettings(db: DB, userId: string): Promise<RepoSettings[]> {
+  const { data } = await db
+    .from('repo_settings')
+    .select('*')
+    .eq('user_id', userId)
+    .order('repo_name', { ascending: true })
+  return (data as RepoSettings[]) ?? []
+}
+
+export async function upsertRepoSettings(
+  db: DB,
+  settings: Omit<RepoSettings, 'id'>,
+): Promise<RepoSettings | null> {
+  const { data } = await db
+    .from('repo_settings')
+    .upsert(
+      { ...settings, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,repo_name' },
+    )
+    .select()
+    .single()
+  return (data as RepoSettings) ?? null
+}
+
+// ─── Issue Embeddings ─────────────────────────────────────────────────────────
+
+export async function saveIssueEmbeddings(
+  db: DB,
+  embeddings: Array<{
+    review_id: string
+    user_id: string
+    file_path: string
+    issue_title: string
+    issue_text: string
+    severity?: string
+    category?: string
+    embedding: number[]
+  }>,
+): Promise<void> {
+  if (embeddings.length === 0) return
+  await db.from('issue_embeddings').insert(embeddings)
+}
+
+export async function findSimilarIssues(
+  db: DB,
+  userId: string,
+  queryEmbedding: number[],
+  threshold = 0.85,
+  limit = 5,
+) {
+  const { data } = await db.rpc('find_similar_issues', {
+    query_embedding: queryEmbedding,
+    match_user_id: userId,
+    match_threshold: threshold,
+    match_count: limit,
+  })
+  return data ?? []
+}
+
 // ─── Plan management ─────────────────────────────────────────────────────────
 
 export async function upgradePlan(

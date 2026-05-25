@@ -1,20 +1,21 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getProfile, listReviews, checkUsageLimit } from '@/lib/supabase/db'
+import { getProfile, listReviews, checkUsageLimit, getMonthlyCost } from '@/lib/supabase/db'
 import { UsageMeter } from '@/components/UsageMeter'
 import { ReviewHistoryCard } from '@/components/ReviewHistoryCard'
 import Link from 'next/link'
-import { Plus, ArrowRight } from 'lucide-react'
+import { Plus, ArrowRight, DollarSign, TrendingUp, Settings, BookOpen } from 'lucide-react'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login?redirectTo=/dashboard')
 
-  const [profile, recentReviews, usage] = await Promise.all([
+  const [profile, recentReviews, usage, monthlyCost] = await Promise.all([
     getProfile(supabase, user.id),
     listReviews(supabase, user.id, { limit: 5 }),
     checkUsageLimit(supabase, user.id),
+    getMonthlyCost(supabase, user.id).catch(() => ({ totalUsd: 0, reviewCount: 0 })),
   ])
 
   return (
@@ -44,19 +45,50 @@ export default async function DashboardPage() {
             resetAt={usage.resetAt}
           />
 
+          {/* Monthly cost widget */}
           <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-            <h2 className="mb-3 text-sm font-medium text-zinc-300">Quick Stats</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                <DollarSign className="size-3.5 text-emerald-400" />
+                This Month
+              </h2>
+              <span className="text-xs text-zinc-600">LLM costs</span>
+            </div>
             <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+                <p className="text-xs text-zinc-600">Total Cost</p>
+                <p className="mt-0.5 text-lg font-semibold text-emerald-400">
+                  {monthlyCost.totalUsd < 0.001
+                    ? monthlyCost.totalUsd === 0 ? '$0.00' : `$${(monthlyCost.totalUsd * 1000).toFixed(2)}m`
+                    : `$${monthlyCost.totalUsd.toFixed(3)}`}
+                </p>
+              </div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+                <p className="text-xs text-zinc-600">Plan</p>
+                <p className="mt-0.5 text-lg font-semibold capitalize text-zinc-100">
+                  {profile?.plan ?? 'free'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Coaching + settings links */}
+          <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+            <h2 className="mb-3 text-sm font-medium text-zinc-300">Tools</h2>
+            <div className="flex flex-col gap-2">
               {[
-                { label: 'Total Reviews', value: String(recentReviews.length > 0 ? '…' : '0') },
-                { label: 'Plan', value: profile?.plan ?? 'free', capitalize: true },
-              ].map(({ label, value, capitalize }) => (
-                <div key={label} className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-                  <p className="text-xs text-zinc-600">{label}</p>
-                  <p className={`mt-0.5 text-lg font-semibold text-zinc-100 ${capitalize ? 'capitalize' : ''}`}>
-                    {value}
-                  </p>
-                </div>
+                { href: '/coaching', icon: TrendingUp, label: 'Team Coaching', desc: 'Issue trends & patterns' },
+                { href: '/settings/rules', icon: BookOpen, label: 'Custom Rules', desc: 'Plain-English review rules' },
+                { href: '/settings/repos', icon: Settings, label: 'Repo Settings', desc: 'Path filters & auto-review' },
+              ].map(({ href, icon: Icon, label, desc }) => (
+                <Link key={href} href={href} className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3 hover:border-zinc-700 transition-colors">
+                  <Icon className="size-4 shrink-0 text-indigo-400" />
+                  <div className="min-w-0">
+                    <p className="text-sm text-zinc-200">{label}</p>
+                    <p className="text-xs text-zinc-600">{desc}</p>
+                  </div>
+                  <ArrowRight className="ml-auto size-3.5 shrink-0 text-zinc-700" />
+                </Link>
               ))}
             </div>
           </div>

@@ -183,3 +183,158 @@ CREATE POLICY "Service role full access to reviews"
 CREATE POLICY "Service role full access to review files"
   ON public.review_files FOR ALL
   USING (auth.jwt() ->> 'role' = 'service_role');
+
+-- ─── Vector Extension (for historical pattern detection) ────────────────────
+CREATE EXTENSION IF NOT EXISTS "vector";
+
+-- ─── Review Costs ──────────────────────────────────────────────────────────
+-- Tracks LLM token usage and USD cost per file per review
+CREATE TABLE IF NOT EXISTS public.review_costs (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  review_id     UUID NOT NULL REFERENCES public.reviews(id) ON DELETE CASCADE,
+  user_id       UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  model         TEXT NOT NULL,
+  file_path     TEXT,
+  input_tokens  INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_usd      NUMERIC(10, 6) NOT NULL DEFAULT 0,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_costs_review_id ON public.review_costs(review_id);
+CREATE INDEX IF NOT EXISTS idx_review_costs_user_month ON public.review_costs(user_id, created_at DESC);
+
+ALTER TABLE public.review_costs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own costs" ON public.review_costs FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Service role full access to costs" ON public.review_costs FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+
+-- ─── Team Rules ────────────────────────────────────────────────────────────
+-- Plain-English coding rules injected as context into every review
+CREATE TABLE IF NOT EXISTS public.team_rules (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  repo_pattern TEXT NOT NULL DEFAULT '*',
+  rule_text    TEXT NOT NULL,
+  enabled      BOOLEAN NOT NULL DEFAULT true,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_rules_user_id ON public.team_rules(user_id);
+
+ALTER TABLE public.team_rules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can manage own rules" ON public.team_rules FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Service role full access to rules" ON public.team_rules FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+
+-- ─── Repo Settings ─────────────────────────────────────────────────────────
+-- Per-repo configuration: path filters, auto-review, model selection
+CREATE TABLE IF NOT EXISTS public.repo_settings (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id              UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  repo_name            TEXT NOT NULL,
+  path_includes        TEXT[] NOT NULL DEFAULT '{}',
+  path_excludes        TEXT[] NOT NULL DEFAULT '{}',
+  auto_review_enabled  BOOLEAN NOT NULL DEFAULT false,
+  models               TEXT[] NOT NULL DEFAULT ARRAY['claude-3-5-sonnet-20241022'],
+  webhook_secret       TEXT,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, repo_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_repo_settings_user_id ON public.repo_settings(user_id);
+
+ALTER TABLE public.repo_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can manage own repo settings" ON public.repo_settings FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Service role full access to repo settings" ON public.repo_settings FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+
+-- ─── Issue Embeddings ──────────────────────────────────────────────────────
+-- Vector embeddings for historical issue similarity search (pgvector)
+CREATE TABLE IF NOT EXISTS public.issue_embeddings (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  review_id   UUID NOT NULL REFERENCES public.reviews(id) ON DELETE CASCADE,
+  user_id     UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  file_path   TEXT NOT NULL,
+  issue_title TEXT NOT NULL,
+  issue_text  TEXT NOT NULL,
+  severity    TEXT,
+  category    TEXT,
+  embedding   vector(1536),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_issue_embeddings_review_id ON public.issue_embeddings(review_id);
+CREATE INDEX IF NOT EXISTS idx_issue_embeddings_user_id ON public.issue_embeddings(user_id);
+-- Vector similarity index (IVFFlat for approximate nearest-neighbor search)
+CREATE INDEX IF NOT EXISTS idx_issue_embeddings_vector
+  ON public.issue_embeddings
+  USING ivfflat (embedding vector_cosine_ops)
+  WITH (lists = 100);
+
+ALTER TABLE public.issue_embeddings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own embeddings" ON public.issue_embeddings FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Service role full access to embeddings" ON public.issue_embeddings FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+
+-- ─── Coaching Insights ─────────────────────────────────────────────────────
+-- Aggregated per-user coaching data (computed periodically)
+CREATE TABLE IF NOT EXISTS public.coaching_insights (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id           UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  period_start      DATE NOT NULL,
+  period_end        DATE NOT NULL,
+  top_issues        JSONB NOT NULL DEFAULT '[]',
+  issue_counts      JSONB NOT NULL DEFAULT '{}',
+  improvement_score NUMERIC(5, 2),
+  total_reviews     INTEGER NOT NULL DEFAULT 0,
+  total_issues      INTEGER NOT NULL DEFAULT 0,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, period_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coaching_insights_user_id ON public.coaching_insights(user_id, period_start DESC);
+
+ALTER TABLE public.coaching_insights ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view own coaching insights" ON public.coaching_insights FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Service role full access to coaching" ON public.coaching_insights FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+
+-- ─── Similarity Search Function ────────────────────────────────────────────
+-- Finds similar past issues by vector cosine similarity
+CREATE OR REPLACE FUNCTION public.find_similar_issues(
+  query_embedding vector(1536),
+  match_user_id   UUID,
+  match_threshold FLOAT DEFAULT 0.85,
+  match_count     INT DEFAULT 5
+)
+RETURNS TABLE (
+  id          UUID,
+  review_id   UUID,
+  file_path   TEXT,
+  issue_title TEXT,
+  issue_text  TEXT,
+  severity    TEXT,
+  category    TEXT,
+  similarity  FLOAT,
+  created_at  TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    ie.id,
+    ie.review_id,
+    ie.file_path,
+    ie.issue_title,
+    ie.issue_text,
+    ie.severity,
+    ie.category,
+    1 - (ie.embedding <=> query_embedding) AS similarity,
+    ie.created_at
+  FROM public.issue_embeddings ie
+  WHERE
+    ie.user_id = match_user_id
+    AND 1 - (ie.embedding <=> query_embedding) > match_threshold
+  ORDER BY ie.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;

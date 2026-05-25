@@ -1,14 +1,26 @@
 import { parseDiff, summarizeDiff } from '@/lib/diff-parser'
 import { shouldSkipFile, getSkipReason } from '@/lib/file-filters'
 import { detectLanguage } from '@/lib/language-detector'
-import { reviewFile } from '@/lib/anthropic'
+import { reviewFileStreaming, reviewFile, generateReviewerBrief } from '@/lib/anthropic'
+import { reviewFileOpenAI } from '@/lib/openai'
+import { reviewFileGemini } from '@/lib/gemini'
+import { buildConsensus } from '@/lib/consensus'
+import { shouldReviewFile } from '@/lib/path-filter'
+import { getReviewerSuggestion } from '@/lib/git-blame'
 import {
   parsePrUrl,
   fetchPrMeta,
   fetchPrFiles,
   buildDiffFromFiles,
 } from '@/lib/github'
-import type { SSEEvent, OverallSummary, FileReviewResult, FileReviewState } from '@/lib/types'
+import type {
+  SSEEvent,
+  OverallSummary,
+  FileReviewResult,
+  FileReviewState,
+  ModelId,
+  SimilarIssue,
+} from '@/lib/types'
 import { PLAN_LIMITS } from '@/lib/supabase/types'
 
 export const runtime = 'nodejs'
@@ -22,7 +34,6 @@ function encode(event: SSEEvent): string {
 }
 
 async function getUserSession(req: Request) {
-  // Only attempt if Supabase is configured
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return null
 
   try {
@@ -54,23 +65,51 @@ async function saveReviewResult(
   files: FileReviewState[],
   summary: OverallSummary,
   meta: { prUrl?: string; prTitle?: string; repo?: string; prNumber?: number },
+  costRecords: Array<{ model: string; file_path?: string; input_tokens: number; output_tokens: number; cost_usd: number }>,
 ): Promise<string | null> {
   if (!session) return null
   try {
-    const { saveReview, incrementUsage } = await import('@/lib/supabase/db')
+    const { saveReview, incrementUsage, saveCosts } = await import('@/lib/supabase/db')
     await incrementUsage(session.supabase, session.user.id)
-    return await saveReview(session.supabase, session.user.id, files, summary, meta)
+    const reviewId = await saveReview(session.supabase, session.user.id, files, summary, meta)
+    if (reviewId && costRecords.length > 0) {
+      await saveCosts(
+        session.supabase,
+        costRecords.map((c) => ({ ...c, review_id: reviewId, user_id: session.user.id })),
+      )
+    }
+    return reviewId
   } catch {
     return null
   }
 }
 
-function makeStream(
-  diff: string,
-  prContext?: { title?: string; body?: string },
-  meta?: { prUrl?: string; prTitle?: string; repo?: string; prNumber?: number },
-  session?: Awaited<ReturnType<typeof getUserSession>>,
-): ReadableStream<Uint8Array> {
+interface StreamOptions {
+  diff: string
+  models: ModelId[]
+  prContext?: { title?: string; body?: string }
+  meta?: { prUrl?: string; prTitle?: string; repo?: string; prNumber?: number }
+  session?: Awaited<ReturnType<typeof getUserSession>>
+  customRules?: string[]
+  pathIncludes?: string[]
+  pathExcludes?: string[]
+  repoOwner?: string
+  repoName?: string
+}
+
+function makeStream(opts: StreamOptions): ReadableStream<Uint8Array> {
+  const {
+    diff,
+    models,
+    prContext,
+    meta,
+    session,
+    customRules = [],
+    pathIncludes = [],
+    pathExcludes = [],
+    repoOwner,
+    repoName,
+  } = opts
   const encoder = new TextEncoder()
 
   return new ReadableStream({
@@ -81,33 +120,221 @@ function makeStream(
         const allFiles = parseDiff(diff)
         const reviewable = allFiles.filter((f) => !shouldSkipFile(f.path))
         const skipped = allFiles.filter((f) => shouldSkipFile(f.path))
-        const toReview = reviewable.slice(0, MAX_FILES)
+
+        // Apply path filters (per-repo settings)
+        const pathFiltered = reviewable.filter((f) =>
+          shouldReviewFile(f.path, pathIncludes, pathExcludes),
+        )
+        const pathSkipped = reviewable.filter(
+          (f) => !shouldReviewFile(f.path, pathIncludes, pathExcludes),
+        )
+
+        const toReview = pathFiltered.slice(0, MAX_FILES)
+        const totalSkipped = skipped.length + pathSkipped.length
 
         if (toReview.length === 0) {
           send({
             type: 'error',
-            message: skipped.length > 0
-              ? `All ${skipped.length} file(s) were skipped (lock files, binaries, generated code).`
-              : 'No files found. Paste a valid unified diff.',
+            message:
+              totalSkipped > 0
+                ? `All ${totalSkipped} file(s) were skipped (lock files, binaries, generated code, or path filters).`
+                : 'No files found. Paste a valid unified diff.',
           })
           controller.close()
           return
         }
 
-        send({ type: 'review_start', total: toReview.length, files: toReview.map((f) => f.path) })
+        const primaryModel = models[0] ?? 'claude-3-5-sonnet-20241022'
+        send({
+          type: 'review_start',
+          total: toReview.length,
+          files: toReview.map((f) => f.path),
+          models,
+        })
 
         const results = new Map<string, FileReviewResult>()
         const errors = new Map<string, string>()
         const fileStates: FileReviewState[] = []
+        const costRecords: Array<{
+          model: string
+          file_path: string
+          input_tokens: number
+          output_tokens: number
+          cost_usd: number
+        }> = []
+
+        // Fetch custom rules once
+        let activeRules: string[] = customRules
+        if (session && activeRules.length === 0) {
+          try {
+            const { getUserRules } = await import('@/lib/supabase/db')
+            const rulesData = await getUserRules(session.supabase, session.user.id, meta?.repo)
+            activeRules = rulesData.map((r) => r.rule_text)
+          } catch { /* rules are optional */ }
+        }
 
         await Promise.allSettled(
           toReview.map(async (file) => {
             const language = detectLanguage(file.path)
+            send({ type: 'file_start', file: file.path })
+
             try {
-              const result = await reviewFile(file.path, language, file.patch, prContext)
+              let result: FileReviewResult
+
+              if (models.length === 1 && primaryModel === 'claude-3-5-sonnet-20241022') {
+                // Single-model streaming (typewriter effect)
+                result = await reviewFileStreaming(
+                  file.path,
+                  language,
+                  file.patch,
+                  (chunk) => send({ type: 'token_chunk', file: file.path, chunk, model: primaryModel }),
+                  prContext,
+                  activeRules,
+                )
+              } else {
+                // Multi-model: run all models in parallel, no token streaming for non-Claude models
+                const modelPromises = models.map(async (modelId) => {
+                  if (modelId === 'claude-3-5-sonnet-20241022') {
+                    return reviewFileStreaming(
+                      file.path,
+                      language,
+                      file.patch,
+                      (chunk) => send({ type: 'token_chunk', file: file.path, chunk, model: modelId }),
+                      prContext,
+                      activeRules,
+                    )
+                  } else if (modelId === 'gpt-4.1' && process.env.OPENAI_API_KEY) {
+                    return reviewFileOpenAI(file.path, language, file.patch, prContext, activeRules)
+                  } else if (modelId === 'gemini-2.0-flash' && process.env.GOOGLE_AI_API_KEY) {
+                    return reviewFileGemini(file.path, language, file.patch, prContext, activeRules)
+                  }
+                  return null
+                })
+
+                const modelResults = (await Promise.allSettled(modelPromises))
+                  .filter((r): r is PromiseFulfilledResult<FileReviewResult | null> => r.status === 'fulfilled')
+                  .map((r) => r.value)
+                  .filter((r): r is FileReviewResult => r !== null)
+
+                const consensus = buildConsensus(modelResults)
+                result = {
+                  ...consensus,
+                  model: primaryModel,
+                  usage: modelResults[0]?.usage,
+                }
+
+                // Collect costs from all models
+                for (const mr of modelResults) {
+                  if (mr.usage) {
+                    costRecords.push({
+                      model: mr.model ?? primaryModel,
+                      file_path: file.path,
+                      input_tokens: mr.usage.input_tokens,
+                      output_tokens: mr.usage.output_tokens,
+                      cost_usd: mr.usage.cost_usd,
+                    })
+                  }
+                }
+
+                results.set(file.path, result)
+                fileStates.push({ file: file.path, status: 'complete', result, consensus })
+                send({ type: 'file_complete', file: file.path, result, consensus })
+
+                // Reviewer assignment suggestion
+                if (repoOwner && repoName) {
+                  const suggestion = await getReviewerSuggestion(
+                    repoOwner,
+                    repoName,
+                    file.path,
+                    session?.githubToken ?? undefined,
+                  ).catch(() => null)
+                  if (suggestion) {
+                    send({ type: 'reviewer_suggestion', file: file.path, suggestion })
+                  }
+                }
+
+                return
+              }
+
+              // Single-model path — collect cost
+              if (result.usage) {
+                costRecords.push({
+                  model: result.model ?? primaryModel,
+                  file_path: file.path,
+                  input_tokens: result.usage.input_tokens,
+                  output_tokens: result.usage.output_tokens,
+                  cost_usd: result.usage.cost_usd,
+                })
+              }
+
               results.set(file.path, result)
               fileStates.push({ file: file.path, status: 'complete', result })
               send({ type: 'file_complete', file: file.path, result })
+
+              // Reviewer assignment suggestion
+              if (repoOwner && repoName) {
+                const suggestion = await getReviewerSuggestion(
+                  repoOwner,
+                  repoName,
+                  file.path,
+                  session?.githubToken ?? undefined,
+                ).catch(() => null)
+                if (suggestion) {
+                  send({ type: 'reviewer_suggestion', file: file.path, suggestion })
+                }
+              }
+
+              // Historical similarity search
+              if (session && process.env.OPENAI_API_KEY && result.issues.length > 0) {
+                try {
+                  const { embedIssues } = await import('@/lib/embeddings')
+                  const { findSimilarIssues, saveIssueEmbeddings } = await import('@/lib/supabase/db')
+
+                  const embeddingInputs = result.issues.map((issue) => ({
+                    issue,
+                    filePath: file.path,
+                  }))
+                  const embedded = await embedIssues(embeddingInputs)
+
+                  const reviewId = 'temp' // will be replaced after save
+                  const similarResults: SimilarIssue[] = []
+
+                  for (const { issue, embedding } of embedded) {
+                    const similars = await findSimilarIssues(
+                      session.supabase,
+                      session.user.id,
+                      embedding,
+                    )
+                    for (const s of similars) {
+                      similarResults.push({
+                        issueTitle: issue.title,
+                        filePath: s.file_path,
+                        reviewId: s.review_id,
+                        similarity: Math.round(s.similarity * 100),
+                        createdAt: s.created_at,
+                      })
+                    }
+
+                    // Store embedding for future use
+                    await saveIssueEmbeddings(session.supabase, [
+                      {
+                        review_id: reviewId,
+                        user_id: session.user.id,
+                        file_path: file.path,
+                        issue_title: issue.title,
+                        issue_text: `${issue.title}: ${issue.description}`,
+                        severity: issue.severity,
+                        category: issue.category,
+                        embedding,
+                      },
+                    ])
+                  }
+
+                  if (similarResults.length > 0) {
+                    send({ type: 'similar_issues', file: file.path, issues: similarResults })
+                  }
+                } catch { /* embeddings are optional */ }
+              }
             } catch (err) {
               const message = err instanceof Error ? err.message : 'Review failed'
               errors.set(file.path, message)
@@ -119,10 +346,12 @@ function makeStream(
 
         let totalIssues = 0, critical = 0, warning = 0, suggestion = 0, info = 0
         const verdicts: string[] = []
+        let totalCostUsd = 0
 
         for (const r of results.values()) {
           totalIssues += r.issues.length
           verdicts.push(r.verdict)
+          if (r.usage) totalCostUsd += r.usage.cost_usd
           for (const i of r.issues) {
             if (i.severity === 'critical') critical++
             else if (i.severity === 'warning') warning++
@@ -130,6 +359,8 @@ function makeStream(
             else info++
           }
         }
+        // Add costs from multi-model records
+        for (const c of costRecords) totalCostUsd += c.cost_usd
 
         const overallVerdict =
           verdicts.includes('needs_changes') || critical > 0
@@ -144,9 +375,12 @@ function makeStream(
               ? `Found ${totalIssues} minor suggestion${totalIssues > 1 ? 's' : ''}.`
               : `No issues found. ${summarizeDiff(toReview)}.`
 
-        if (skipped.length > 0) {
-          const reasons = [...new Set(skipped.map((f) => getSkipReason(f.path)))]
-          summaryText += ` (${skipped.length} file${skipped.length > 1 ? 's' : ''} skipped: ${reasons.join(', ')})`
+        if (skipped.length + pathSkipped.length > 0) {
+          const reasons = [...new Set([
+            ...skipped.map((f) => getSkipReason(f.path)),
+            ...(pathSkipped.length > 0 ? ['path filter'] : []),
+          ])]
+          summaryText += ` (${skipped.length + pathSkipped.length} file${skipped.length + pathSkipped.length > 1 ? 's' : ''} skipped: ${reasons.join(', ')})`
         }
 
         const summary: OverallSummary = {
@@ -158,10 +392,35 @@ function makeStream(
           suggestion_count: suggestion,
           info_count: info,
           files_reviewed: results.size,
-          files_skipped: skipped.length + errors.size,
+          files_skipped: totalSkipped + errors.size,
+          models_used: models,
+          total_cost_usd: totalCostUsd,
         }
 
-        const reviewId = await saveReviewResult(session ?? null, fileStates, summary, meta ?? {})
+        // Generate AI reviewer brief
+        const briefFiles = fileStates
+          .filter((f) => f.status === 'complete' && f.result)
+          .map((f) => ({
+            path: f.file,
+            issues: f.result!.issues.map((i) => ({
+              severity: i.severity,
+              title: i.title,
+              line: i.line,
+            })),
+          }))
+
+        try {
+          const brief = await generateReviewerBrief(briefFiles)
+          if (brief) send({ type: 'reviewer_brief', brief })
+        } catch { /* brief is optional */ }
+
+        const reviewId = await saveReviewResult(
+          session ?? null,
+          fileStates,
+          summary,
+          meta ?? {},
+          costRecords,
+        )
         send({ type: 'review_complete', summary, ...(reviewId ? { reviewId } : {}) } as SSEEvent)
       } catch (err) {
         send({ type: 'error', message: err instanceof Error ? err.message : 'An unexpected error occurred' })
@@ -181,6 +440,8 @@ export async function POST(req: Request) {
     diff?: string
     prUrl?: string
     prContext?: { title?: string; body?: string }
+    models?: ModelId[]
+    customRules?: string[]
   }
   try {
     body = await req.json()
@@ -188,15 +449,20 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { prUrl, prContext } = body
+  const { prUrl, prContext, customRules } = body
+  const models: ModelId[] = (body.models && body.models.length > 0)
+    ? body.models
+    : ['claude-3-5-sonnet-20241022']
   let { diff } = body
   let meta: { prUrl?: string; prTitle?: string; repo?: string; prNumber?: number } = {}
   let session: Awaited<ReturnType<typeof getUserSession>> = null
+  let repoOwner: string | undefined
+  let repoName: string | undefined
+  let pathIncludes: string[] = []
+  let pathExcludes: string[] = []
 
-  // Get user session for usage limits and saving
   session = await getUserSession(req)
 
-  // Check usage limits for authenticated users
   if (session) {
     const { usage } = session
     if (!usage.allowed) {
@@ -213,12 +479,14 @@ export async function POST(req: Request) {
     }
   }
 
-  // Fetch diff from GitHub if PR URL provided
   if (prUrl) {
     const parsed = parsePrUrl(prUrl)
     if (!parsed) {
       return Response.json({ error: 'Invalid GitHub PR URL' }, { status: 400 })
     }
+
+    repoOwner = parsed.owner
+    repoName = parsed.repo
 
     const githubToken = session?.githubToken ?? undefined
     try {
@@ -235,9 +503,39 @@ export async function POST(req: Request) {
         prNumber: parsed.number,
       }
 
+      // Load per-repo path filters
+      if (session) {
+        try {
+          const { getRepoSettings } = await import('@/lib/supabase/db')
+          const repoSettings = await getRepoSettings(
+            session.supabase,
+            session.user.id,
+            `${parsed.owner}/${parsed.repo}`,
+          )
+          if (repoSettings) {
+            pathIncludes = repoSettings.path_includes
+            pathExcludes = repoSettings.path_excludes
+            // Override models from repo settings if not explicitly provided in request
+            if (!body.models && repoSettings.models?.length > 0) {
+              models.splice(0, models.length, ...repoSettings.models as ModelId[])
+            }
+          }
+        } catch { /* repo settings are optional */ }
+      }
+
       const contextFromPr = { title: prMeta.title, body: prMeta.body }
       return new Response(
-        makeStream(diff, contextFromPr, meta, session),
+        makeStream({
+          diff,
+          models,
+          prContext: contextFromPr,
+          meta,
+          session,
+          pathIncludes,
+          pathExcludes,
+          repoOwner,
+          repoName,
+        }),
         {
           headers: {
             'Content-Type': 'text/event-stream',
@@ -263,11 +561,14 @@ export async function POST(req: Request) {
     )
   }
 
-  return new Response(makeStream(diff.trim(), prContext, meta, session), {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      'X-Accel-Buffering': 'no',
+  return new Response(
+    makeStream({ diff: diff.trim(), models, prContext, meta, session, customRules }),
+    {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'X-Accel-Buffering': 'no',
+      },
     },
-  })
+  )
 }

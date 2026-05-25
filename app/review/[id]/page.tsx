@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getReview } from '@/lib/supabase/db'
@@ -8,8 +9,38 @@ import type { Issue } from '@/lib/types'
 import { CheckCircle2, XCircle, MessageSquare, ArrowLeft, GitBranch, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://getprova.dev'
+
 interface ReviewDetailPageProps {
   params: Promise<{ id: string }>
+}
+
+export async function generateMetadata({ params }: ReviewDetailPageProps): Promise<Metadata> {
+  const { id } = await params
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const review = await getReview(supabase, id, user?.id)
+    if (!review) return {}
+
+    const title = review.pr_title
+      ? `Review: ${review.pr_title}`
+      : `Code Review — ${review.repo ?? 'PR'}`
+    const description = review.overall_summary ?? 'AI-powered code review result'
+
+    return {
+      title,
+      description,
+      openGraph: {
+        title,
+        description,
+        url: `${APP_URL}/review/${id}`,
+        images: [`${APP_URL}/opengraph-image`],
+      },
+    }
+  } catch {
+    return {}
+  }
 }
 
 const VERDICT_CONFIG = {
