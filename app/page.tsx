@@ -2,29 +2,85 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { ReviewStream } from '@/components/ReviewStream'
-import { FeatureShowcase } from '@/components/FeatureShowcase'
 import { FaqAccordion } from '@/components/FaqAccordion'
-import { ArrowRight, Terminal, GitBranch, Link2 } from 'lucide-react'
+import { ArrowRight, Zap, Layers, DollarSign, TrendingUp, ShieldCheck, BookOpen } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'AI Code Review for Pull Requests — Free & Instant',
+  title: 'AI Code Review for Pull Requests — Free & Instant | Prova',
   description:
-    'Paste any git diff or GitHub PR URL. Streaming per-file code review from Claude 3.5, GPT-4.1, and Gemini. Bugs, security, performance. Free, no signup required.',
-  openGraph: {
-    title: 'Prova — AI Code Review, in seconds',
-    description: 'Real-time streaming code review · Multi-model consensus · Team coaching · Free.',
-  },
+    'Paste any git diff or GitHub PR URL. Streaming AI code review from Claude, GPT-4.1, and Gemini. Catch bugs, security issues, and performance problems in seconds. Free — no signup required.',
+  alternates: { canonical: 'https://getprova.dev' },
 }
 
+const FEATURES = [
+  {
+    icon: Zap,
+    title: 'Streams token-by-token',
+    desc: 'See the review as Claude writes it — multiple files in parallel. No waiting.',
+    color: 'text-indigo-400',
+    bg: 'bg-indigo-500/10',
+  },
+  {
+    icon: Layers,
+    title: '3-model consensus',
+    desc: 'Claude + GPT-4.1 + Gemini review the same diff. Issues all three agree on = high confidence.',
+    color: 'text-violet-400',
+    bg: 'bg-violet-500/10',
+    badge: 'Unique',
+  },
+  {
+    icon: DollarSign,
+    title: 'Exact cost per review',
+    desc: 'See the precise USD cost per review. Typical PR: under $0.02. No flat subscription.',
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/10',
+    badge: 'Unique',
+  },
+  {
+    icon: TrendingUp,
+    title: 'Team coaching',
+    desc: '30-day pattern analysis. See which issues your team keeps repeating — and track improvement.',
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/10',
+    badge: 'Unique',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Security-first',
+    desc: 'SQL injection, missing auth checks, hardcoded secrets — flagged by severity, not noise.',
+    color: 'text-red-400',
+    bg: 'bg-red-500/10',
+  },
+  {
+    icon: BookOpen,
+    title: 'Plain-English rules',
+    desc: '"Never use console.log in production." No YAML, no regex — just type your team\'s standards.',
+    color: 'text-sky-400',
+    bg: 'bg-sky-500/10',
+  },
+]
+
 const FAQ = [
-  { q: 'Does it work without signing in?', a: 'Yes. Paste any git diff and get a full review instantly — no account required. Sign in with GitHub to unlock PR URL input, review history, cost tracking, and team coaching.' },
-  { q: 'How is this different from GitHub Copilot or CodeRabbit?', a: 'Copilot reviews are static post-merge suggestions. CodeRabbit charges $24/month flat. Prova streams results token-by-token, runs multi-model consensus, shows exact LLM costs per review, and builds coaching insights from your team\'s patterns — none of which exist elsewhere.' },
-  { q: 'What does multi-model consensus mean?', a: 'Claude 3.5, GPT-4.1, and Gemini 2.0 Flash all review the same diff simultaneously. Issues flagged by 2+ models get "high confidence" badges. If all three agree, it\'s almost certainly real.' },
-  { q: 'How much does each review cost?', a: 'Typical 3-file PR: under $0.02 with Claude only. Multi-model consensus: under $0.06. You pay your actual API costs — no markup, no subscription.' },
-  { q: 'How do I get a diff to paste?', a: 'Run `git diff main` for branch vs main, `git diff HEAD~1` for your last commit, or paste a GitHub PR URL directly. Auto-review via GitHub webhook is also supported.' },
-  { q: 'Can I add team-specific rules?', a: 'Yes. Settings → Custom Rules. Write in plain sentences: "All SQL queries must use parameterized statements." No YAML, no regex — just type it.' },
-  { q: 'Is my code ever stored?', a: 'Diffs are never stored. Only review results (issues, summaries, verdicts) are saved. Delete any review at any time.' },
-  { q: 'Does it support private GitHub repos?', a: 'Yes. Sign in with GitHub and paste the PR URL — Prova uses your OAuth token to fetch the diff. The token is never stored; it lives only in your session.' },
+  {
+    q: 'Does it work without signing in?',
+    a: 'Yes. Paste any git diff and get a full review instantly — no account required. Sign in with GitHub to unlock PR URL input, saved history, and team coaching.',
+  },
+  {
+    q: 'What makes it different from GitHub Copilot or CodeRabbit?',
+    a: 'Prova streams results token-by-token, runs 3-model consensus (Claude + GPT-4.1 + Gemini simultaneously), shows exact LLM cost per review, and builds coaching insights from your team\'s patterns. CodeRabbit charges $24/month flat and does none of this.',
+  },
+  {
+    q: 'How much does each review cost?',
+    a: 'A typical 3-file PR costs under $0.02 with Claude. Multi-model consensus: under $0.06. You pay your exact API cost — no markup, no subscription.',
+  },
+  {
+    q: 'How do I get a diff to paste?',
+    a: 'Run git diff main for branch vs main, or git diff HEAD~1 for your last commit. Or paste a GitHub PR URL directly if you\'re signed in.',
+  },
+  {
+    q: 'Is my code ever stored?',
+    a: 'Diffs are never stored. Only review results (issues, summaries, verdicts) are saved for signed-in users. Delete any review at any time.',
+  },
 ]
 
 export default async function Home() {
@@ -42,71 +98,56 @@ export default async function Home() {
   } catch { /* anonymous mode */ }
 
   return (
-    <div className="mx-auto max-w-5xl px-4">
+    <div className="mx-auto max-w-4xl px-5">
 
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <div className="pt-12 pb-8 text-center">
-        <h1 className="text-5xl font-extrabold tracking-tight text-gray-900 dark:text-zinc-50 sm:text-6xl">
-          Better code review,{' '}
-          <span className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
+      <div className="pt-16 pb-10 text-center">
+        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-indigo-500/25 bg-indigo-500/8 px-3.5 py-1.5">
+          <span className="size-1.5 rounded-full bg-indigo-400 animate-pulse-subtle" />
+          <span className="text-xs font-medium text-indigo-400">Free — no signup required</span>
+        </div>
+
+        <h1 className="text-5xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl">
+          <span className="text-[--foreground]">AI code review,</span>
+          <br />
+          <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text text-transparent">
             in seconds.
           </span>
         </h1>
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+
+        <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-[--foreground] opacity-50">
+          Paste a git diff or GitHub PR URL. Bugs, security issues, and performance
+          problems streamed instantly — from Claude, GPT-4.1, and Gemini.
+        </p>
+
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/login"
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-md shadow-indigo-200 transition-all hover:bg-indigo-500 hover:shadow-indigo-300 dark:shadow-indigo-900/40"
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition-all hover:bg-indigo-500 hover:shadow-indigo-500/40 active:scale-[0.98]"
           >
             Connect GitHub
             <ArrowRight className="size-4" />
           </Link>
           <a
             href="#tool"
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-700 transition-all hover:border-gray-400 hover:text-gray-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-500"
+            className="inline-flex items-center gap-2 rounded-xl border border-[--border] bg-[--surface] px-6 py-3 text-sm font-semibold text-[--foreground] opacity-70 transition-all hover:opacity-100 hover:border-indigo-500/40"
           >
-            Try free — no login needed
+            Try free — no login
           </a>
         </div>
       </div>
 
-      {/* ── Feature showcase (tabs) — ABOVE the tool ─────────────────────── */}
-      <FeatureShowcase />
-
       {/* ── Live tool ────────────────────────────────────────────────────── */}
-      <section id="tool" className="mt-16 scroll-mt-20">
-        <h2 className="mb-4 text-center text-xl font-bold text-gray-900 dark:text-zinc-100">
-          Try it right now
-        </h2>
-
-        {/* Diff shortcuts */}
-        <div className="mb-4 grid gap-2 sm:grid-cols-3">
-          {[
-            { icon: Terminal, cmd: 'git diff main', label: 'Branch vs main' },
-            { icon: GitBranch, cmd: 'git diff HEAD~1', label: 'Last commit' },
-            { icon: Link2, cmd: 'Paste a GitHub PR URL', label: 'Private repos — sign in first', mono: false },
-          ].map((item) => {
-            const Icon = item.icon
-            return (
-              <div key={item.cmd} className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                <Icon className="size-4 shrink-0 text-gray-400 dark:text-zinc-600" />
-                <div>
-                  <p className={`text-sm text-gray-800 dark:text-zinc-200 ${item.mono !== false ? 'font-mono' : ''}`}>{item.cmd}</p>
-                  <p className="text-xs text-gray-400 dark:text-zinc-600">{item.label}</p>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* The review tool */}
-        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
-          <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50 px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900">
+      <section id="tool" className="scroll-mt-20">
+        <div className="overflow-hidden rounded-2xl border border-[--border] bg-[--surface] shadow-2xl shadow-black/20">
+          {/* Window chrome */}
+          <div className="flex items-center gap-3 border-b border-[--border] bg-[--background]/60 px-4 py-3">
             <div className="flex gap-1.5">
-              <div className="size-3 rounded-full bg-red-400" />
-              <div className="size-3 rounded-full bg-yellow-400" />
-              <div className="size-3 rounded-full bg-green-400" />
+              <div className="size-3 rounded-full bg-red-500/60" />
+              <div className="size-3 rounded-full bg-yellow-500/60" />
+              <div className="size-3 rounded-full bg-green-500/60" />
             </div>
-            <div className="flex-1 rounded-md bg-white px-3 py-1 text-xs text-gray-400 text-center border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-500">
+            <div className="flex-1 rounded-md border border-[--border] bg-[--surface] px-3 py-1 text-center text-xs text-[--foreground] opacity-30">
               getprova.dev
             </div>
           </div>
@@ -116,34 +157,67 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ── Comparison table ─────────────────────────────────────────────── */}
+      {/* ── Trust strip ──────────────────────────────────────────────────── */}
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-xs text-[--foreground] opacity-30">
+        {['Diffs never stored', 'No setup required', 'Up to 50 files per review', 'Cancel anytime'].map((t) => (
+          <span key={t} className="flex items-center gap-1.5">
+            <span className="size-1 rounded-full bg-current" />
+            {t}
+          </span>
+        ))}
+      </div>
+
+      {/* ── Features grid ────────────────────────────────────────────────── */}
       <section className="mt-20">
-        <h2 className="mb-6 text-center text-2xl font-bold text-gray-900 dark:text-zinc-100">
-          How it stacks up
-        </h2>
-        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="grid grid-cols-4 border-b border-gray-100 bg-gray-50 dark:border-zinc-800 dark:bg-zinc-800/60">
-            {['Feature', 'Prova', 'CodeRabbit', 'Copilot'].map((h, i) => (
-              <div key={h} className={`px-5 py-3 text-xs font-bold uppercase tracking-wider ${i === 1 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-zinc-500'}`}>{h}</div>
-            ))}
-          </div>
-          {[
-            ['Real-time streaming', '✓', '✗', '✗'],
-            ['Multi-model consensus', '✓', '✗', '✗'],
-            ['Cost per-review visibility', '✓', '✗', '✗'],
-            ['Team coaching & patterns', '✓', '✗', '✗'],
-            ['Plain-English rules', '✓', '✗', '✗'],
-            ['Pay as you go', '✓', '✗', '✗'],
-            ['No IDE plugin required', '✓', '✓', '✗'],
-            ['Free tier', '✓', '✓', 'Partial'],
-          ].map(([feature, ...vals]) => (
-            <div key={feature} className="grid grid-cols-4 border-t border-gray-100 text-sm transition-colors hover:bg-gray-50 dark:border-zinc-800 dark:hover:bg-zinc-800/40">
-              <div className="px-5 py-3.5 text-gray-600 dark:text-zinc-400">{feature}</div>
-              {vals.map((v, i) => (
-                <div key={i} className={`px-5 py-3.5 font-semibold ${i === 0 && v === '✓' ? 'text-indigo-600 dark:text-indigo-400' : v === '✗' ? 'text-gray-300 dark:text-zinc-700' : 'text-gray-500 dark:text-zinc-500'}`}>
-                  {v}
+        <div className="mb-8 text-center">
+          <h2 className="text-2xl font-bold text-[--foreground]">
+            Everything you need. Nothing you don&apos;t.
+          </h2>
+          <p className="mt-2 text-sm text-[--foreground] opacity-50">
+            Built differently from every other code review tool.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((f) => {
+            const Icon = f.icon
+            return (
+              <div
+                key={f.title}
+                className="group rounded-xl border border-[--border] bg-[--surface] p-5 transition-all hover:border-indigo-500/30 hover:shadow-lg hover:shadow-black/10"
+              >
+                <div className={`mb-3 inline-flex size-9 items-center justify-center rounded-lg ${f.bg}`}>
+                  <Icon className={`size-4.5 ${f.color}`} />
                 </div>
-              ))}
+                <div className="flex items-start gap-2">
+                  <h3 className="text-sm font-semibold text-[--foreground]">{f.title}</h3>
+                  {f.badge && (
+                    <span className="shrink-0 rounded-full bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-bold text-indigo-400">
+                      {f.badge}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1.5 text-sm leading-relaxed text-[--foreground] opacity-50">
+                  {f.desc}
+                </p>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* ── Differentiator band ──────────────────────────────────────────── */}
+      <section className="mt-20 overflow-hidden rounded-2xl border border-[--border] bg-[--surface]">
+        <div className="grid sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[--border]">
+          {[
+            { label: 'vs CodeRabbit', value: '$24/mo flat', desc: 'Prova: pay only for what you use (~$0.02/PR)' },
+            { label: 'vs GitHub Copilot', value: 'IDE-only', desc: 'Prova: browser, no plugin, no IDE lock-in' },
+            { label: 'vs manual review', value: '2–4 hours', desc: 'Prova: first result in under 3 seconds' },
+          ].map((item) => (
+            <div key={item.label} className="px-6 py-5">
+              <p className="text-xs font-medium text-[--foreground] opacity-40 uppercase tracking-wider">{item.label}</p>
+              <p className="mt-1 text-xl font-bold text-red-400 line-through opacity-60">{item.value}</p>
+              <p className="mt-1 text-sm text-[--foreground] opacity-70">{item.desc}</p>
             </div>
           ))}
         </div>
@@ -151,22 +225,31 @@ export default async function Home() {
 
       {/* ── FAQ ──────────────────────────────────────────────────────────── */}
       <section className="mt-20">
-        <h2 className="mb-6 text-center text-2xl font-bold text-gray-900 dark:text-zinc-100">Questions</h2>
+        <h2 className="mb-6 text-center text-2xl font-bold text-[--foreground]">
+          Common questions
+        </h2>
         <FaqAccordion items={FAQ} />
       </section>
 
       {/* ── Bottom CTA ───────────────────────────────────────────────────── */}
-      <section className="my-20 overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 px-8 py-14 text-center shadow-xl shadow-indigo-200 dark:shadow-indigo-900/30">
-        <h2 className="mb-2 text-3xl font-extrabold text-white">Start in 30 seconds</h2>
-        <p className="mb-7 text-indigo-100">No credit card. No setup. Paste your first diff now.</p>
-        <div className="flex flex-wrap items-center justify-center gap-4">
+      <section className="my-20 overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-700 px-8 py-14 text-center shadow-2xl shadow-indigo-500/20">
+        <h2 className="text-3xl font-extrabold text-white tracking-tight">
+          Start your first review now
+        </h2>
+        <p className="mt-2 text-indigo-200">
+          No credit card. No setup. Paste a diff and go.
+        </p>
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-4">
           <Link
             href="/login"
-            className="inline-flex items-center gap-2 rounded-xl bg-white px-7 py-3 text-sm font-bold text-indigo-700 shadow-md transition-all hover:bg-indigo-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-7 py-3 text-sm font-bold text-indigo-700 shadow-md transition-all hover:bg-indigo-50 active:scale-[0.98]"
           >
             Connect GitHub <ArrowRight className="size-4" />
           </Link>
-          <a href="#tool" className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-7 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20">
+          <a
+            href="#tool"
+            className="inline-flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-7 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20"
+          >
             Try without account
           </a>
         </div>

@@ -7,24 +7,33 @@ import { cn } from '@/lib/utils'
 interface FaqItem { q: string; a: string }
 
 export function FaqAccordion({ items }: { items: FaqItem[] }) {
-  const [open, setOpen] = useState<number | null>(0)
+  const [open, setOpen] = useState<number | null>(null)
 
   return (
-    <div className="divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex flex-col gap-2">
       {items.map((item, i) => (
-        <div key={i}>
+        <div
+          key={i}
+          className="overflow-hidden rounded-xl border border-[--border] bg-[--surface] transition-colors"
+        >
           <button
             onClick={() => setOpen(open === i ? null : i)}
-            className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left transition-colors hover:bg-gray-50 dark:hover:bg-zinc-800/60"
+            className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-[--background]/50 transition-colors"
           >
-            <span className={cn('text-sm font-semibold', open === i ? 'text-gray-900 dark:text-zinc-100' : 'text-gray-600 dark:text-zinc-300')}>
+            <span className={cn(
+              'text-sm font-medium transition-colors',
+              open === i ? 'text-[--foreground]' : 'text-[--foreground] opacity-65'
+            )}>
               {item.q}
             </span>
-            <ChevronDown className={cn('size-4 shrink-0 text-gray-400 transition-transform duration-200 dark:text-zinc-500', open === i && 'rotate-180')} />
+            <ChevronDown className={cn(
+              'size-4 shrink-0 text-[--foreground] opacity-30 transition-transform duration-200',
+              open === i && 'rotate-180 opacity-60'
+            )} />
           </button>
           {open === i && (
-            <div className="border-t border-gray-100 bg-gray-50/60 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-800/30">
-              <p className="text-sm leading-relaxed text-gray-600 dark:text-zinc-400">{item.a}</p>
+            <div className="border-t border-[--border] px-5 py-4">
+              <p className="text-sm leading-relaxed text-[--foreground] opacity-55">{item.a}</p>
             </div>
           )}
         </div>

@@ -14,6 +14,7 @@ import type {
   ModelId,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { analytics } from '@/lib/analytics'
 import { GitHubIcon } from '@/components/GitHubIcon'
 import {
   CheckCircle2,
@@ -135,12 +136,14 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
     const md = buildMarkdown(fileStates, summary)
     await navigator.clipboard.writeText(md)
     setCopied(true)
+    analytics.copyMarkdownClicked(savedReviewId ?? undefined)
     setTimeout(() => setCopied(false), 2000)
-  }, [fileStates, summary])
+  }, [fileStates, summary, savedReviewId])
 
   const handlePostToGitHub = useCallback(async () => {
     if (!activePrUrl || !githubToken) return
     setPosting(true)
+    analytics.postToGitHubClicked(activePrUrl ?? '')
     try {
       const body = buildMarkdown(fileStates, summary)
       const res = await fetch('/api/github/post-review', {
@@ -151,6 +154,7 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
       if (!res.ok) throw new Error((await res.json()).error ?? 'Failed')
       const { url } = await res.json()
       setPostedUrl(url)
+      analytics.postToGitHubSuccess(activePrUrl ?? '')
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to post to GitHub')
     } finally {
@@ -292,6 +296,14 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
         setSummary(event.summary)
         if ('reviewId' in event && event.reviewId) setSavedReviewId(event.reviewId)
         setAppState('complete')
+        analytics.reviewCompleted({
+          filesReviewed: event.summary.files_reviewed,
+          issuesFound: event.summary.total_issues,
+          costUsd: event.summary.total_cost_usd ?? 0,
+          verdict: event.summary.verdict,
+          durationMs: 0,
+          modelsUsed: event.summary.models_used?.length ?? 1,
+        })
         break
       }
 
@@ -314,8 +326,10 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
         {/* Model Selector */}
         <div>
           <button
-            onClick={() => setShowModelPicker((v) => !v)}
-            className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            onClick={() => {
+              setShowModelPicker((v) => !v)
+            }}
+            className="flex items-center gap-2 text-xs text-[--foreground] opacity-40 hover:opacity-70 transition-opacity"
           >
             <Sparkles className="size-3" />
             <span>
@@ -327,16 +341,19 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
           </button>
 
           {showModelPicker && (
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2.5 flex flex-wrap gap-2">
               {MODEL_OPTIONS.map((opt) => {
                 const active = selectedModels.includes(opt.id)
                 return (
                   <button
                     key={opt.id}
-                    onClick={() => toggleModel(opt.id)}
+                    onClick={() => {
+                      toggleModel(opt.id)
+                      analytics.modelSelected(selectedModels.length === 1 && !active ? 'consensus' : 'single')
+                    }}
                     className={cn(
-                      'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all',
-                      active ? opt.color : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700',
+                      'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all',
+                      active ? opt.color : 'border-[--border] bg-[--surface] text-[--foreground] opacity-50 hover:opacity-80',
                     )}
                   >
                     {opt.label}
@@ -344,9 +361,11 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
                   </button>
                 )
               })}
-              <span className="self-center text-xs text-zinc-600">
-                {isMultiModel ? '· Consensus mode — slower but higher accuracy' : ''}
-              </span>
+              {isMultiModel && (
+                <span className="self-center text-xs text-[--foreground] opacity-30">
+                  · Higher accuracy, ~3× cost
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -388,7 +407,7 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
             'rounded-xl border p-5 transition-all duration-500',
             summary && verdictConfig
               ? verdictConfig.bg
-              : 'border-zinc-800 bg-zinc-900/60',
+              : 'border-[--border] bg-[--surface]',
           )}
         >
           {summary && verdictConfig ? (
@@ -444,13 +463,13 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
           ) : (
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-zinc-300">
+                <span className="text-sm font-medium text-[--foreground] opacity-70">
                   Reviewing {completedFiles.length} of {fileStates.length} files…
-                  {isMultiModel && <span className="ml-2 text-zinc-500">(consensus mode)</span>}
+                  {isMultiModel && <span className="ml-2 opacity-50">(consensus mode)</span>}
                 </span>
-                <span className="text-sm text-zinc-500">{Math.round(progress * 100)}%</span>
+                <span className="text-sm text-[--foreground] opacity-40">{Math.round(progress * 100)}%</span>
               </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[--border]">
                 <div
                   className="h-full rounded-full bg-indigo-500 transition-all duration-500"
                   style={{ width: `${progress * 100}%` }}
@@ -517,7 +536,7 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
       <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
         <button
           onClick={reset}
-          className="flex items-center gap-2 rounded-xl border border-zinc-800 px-4 py-2.5 text-sm text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200"
+          className="flex items-center gap-2 rounded-xl border border-[--border] px-4 py-2.5 text-sm text-[--foreground] opacity-50 transition-all hover:opacity-100 hover:border-indigo-500/30"
         >
           <RotateCcw className="size-4" />
           New Review
@@ -528,7 +547,7 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
             {savedReviewId && (
               <a
                 href={`/review/${savedReviewId}`}
-                className="flex items-center gap-2 rounded-xl border border-zinc-800 px-4 py-2.5 text-sm text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200"
+                className="flex items-center gap-2 rounded-xl border border-[--border] px-4 py-2.5 text-sm text-[--foreground] opacity-50 transition-all hover:opacity-100 hover:border-indigo-500/30"
               >
                 <BookMarked className="size-4" />
                 Saved
@@ -539,7 +558,7 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
               <button
                 onClick={handlePostToGitHub}
                 disabled={posting}
-                className="flex items-center gap-2 rounded-xl border border-zinc-800 px-4 py-2.5 text-sm text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-xl border border-[--border] px-4 py-2.5 text-sm text-[--foreground] opacity-50 transition-all hover:opacity-100 hover:border-indigo-500/30 disabled:opacity-25"
               >
                 {posting ? <Loader2 className="size-4 animate-spin" /> : <GitHubIcon className="size-4" />}
                 {posting ? 'Posting…' : 'Post to GitHub'}
@@ -551,7 +570,7 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
                 href={postedUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-emerald-950/20 px-4 py-2.5 text-sm text-emerald-400 transition-colors hover:border-emerald-700"
+                className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-4 py-2.5 text-sm text-emerald-400 transition-all hover:border-emerald-500/50"
               >
                 <ExternalLink className="size-4" />
                 View on GitHub
@@ -560,12 +579,12 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
 
             <button
               onClick={handleCopy}
-              className="flex items-center gap-2 rounded-xl border border-zinc-800 px-4 py-2.5 text-sm text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200"
+              className="flex items-center gap-2 rounded-xl border border-[--border] px-4 py-2.5 text-sm text-[--foreground] opacity-50 transition-all hover:opacity-100 hover:border-indigo-500/30"
             >
               {copied ? (
                 <>
                   <Check className="size-4 text-emerald-400" />
-                  <span className="text-emerald-400">Copied!</span>
+                  <span className="text-emerald-400 opacity-100">Copied!</span>
                 </>
               ) : (
                 <>
@@ -596,14 +615,14 @@ function FileReviewCardExtended({ state, isMultiModel }: FileReviewCardExtendedP
     <div className="flex flex-col gap-2">
       {/* Streaming indicator */}
       {state.status === 'reviewing' && state.streamingText !== undefined && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3">
+        <div className="rounded-xl border border-[--border] bg-[--surface] px-4 py-3">
           <div className="flex items-center gap-2 mb-2">
             <Loader2 className="size-3.5 animate-spin text-indigo-400" />
-            <span className="text-xs font-mono text-zinc-500 truncate">{state.file}</span>
+            <span className="text-xs font-mono text-[--foreground] opacity-40 truncate">{state.file}</span>
           </div>
-          <p className="text-xs text-zinc-600 font-mono leading-relaxed line-clamp-3">
+          <p className="text-xs text-[--foreground] opacity-30 font-mono leading-relaxed line-clamp-3">
             {state.streamingText || '…'}
-            <span className="animate-pulse">▌</span>
+            <span className="animate-pulse text-indigo-400 opacity-100">▌</span>
           </p>
         </div>
       )}
