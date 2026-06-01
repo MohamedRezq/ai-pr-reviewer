@@ -567,6 +567,13 @@ export async function POST(req: Request) {
     )
   }
 
+  if (!diff.includes('diff --git') && !diff.includes('\n@@')) {
+    return Response.json(
+      { error: 'No valid git diff found. Paste the output of `git diff` or use a GitHub PR URL.' },
+      { status: 400 },
+    )
+  }
+
   return new Response(
     makeStream({ diff: diff.trim(), models, prContext, meta, session, customRules }),
     {
