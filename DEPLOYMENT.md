@@ -1,16 +1,13 @@
-# Deployment — Production & Staging
+# Deployment
 
-See the full guide in the monorepo root: [`../../DEPLOYMENT.md`](../../DEPLOYMENT.md)
+**Production** → Vercel project `ai-pr-reviewer` · branch `master`  
+**Staging** → Vercel project `ai-pr-reviewer-staging` · branch `staging`
 
-Quick reference:
+Full guide: [../../DEPLOYMENT.md](../../DEPLOYMENT.md)
 
-| Branch | Environment | URL |
-|--------|-------------|-----|
-| `master` | Production | Custom domain (you assign in Vercel) |
-| `staging` | Preview | Auto `*.vercel.app` via `VERCEL_URL` |
+```powershell
+.\scripts\deploy-production.ps1
+.\scripts\deploy-staging.ps1
+```
 
-**Required Vercel env (Production + Preview):** `ANTHROPIC_API_KEY`, `SUPABASE_SECRET_KEY`, Supabase URL + publishable key.
-
-**Production only:** `NEXT_PUBLIC_APP_URL=https://your-domain.com`
-
-Health: `GET /api/health`
+GitHub: add `VERCEL_TOKEN` secret for auto-deploy workflows.

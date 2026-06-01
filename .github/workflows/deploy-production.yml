@@ -1,0 +1,37 @@
+# Optional: explicit production deploy on master push.
+# Vercel Git integration also deploys master to ai-pr-reviewer when connected.
+
+name: Deploy Production
+
+on:
+  push:
+    branches: [master]
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Vercel (production project)
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: team_2sEN4MTkDy21SIYM7fWe0N5c
+          vercel-project-id: prj_hkIwtaTKHi1v4V08KkBG0mPmUmSY
+          vercel-args: '--prod'
+          working-directory: ./

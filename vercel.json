@@ -4,7 +4,7 @@
   "git": {
     "deploymentEnabled": {
       "master": true,
-      "staging": true
+      "staging": false
     }
   },
   "github": {
