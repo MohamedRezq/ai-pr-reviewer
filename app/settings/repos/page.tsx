@@ -15,12 +15,12 @@ interface RepoSettings {
 }
 
 const MODEL_LABELS: Record<string, string> = {
-  'claude-3-5-sonnet-20241022': 'Claude 3.5',
+  'claude-sonnet-4-6': 'Claude Sonnet 4.6',
   'gpt-4.1': 'GPT-4.1',
   'gemini-2.0-flash': 'Gemini 2.0',
 }
 
-const ALL_MODELS = ['claude-3-5-sonnet-20241022', 'gpt-4.1', 'gemini-2.0-flash']
+const ALL_MODELS = ['claude-sonnet-4-6', 'gpt-4.1', 'gemini-2.0-flash']
 
 export default function ReposPage() {
   const [repos, setRepos] = useState<RepoSettings[]>([])
@@ -33,7 +33,7 @@ export default function ReposPage() {
     path_includes: '',
     path_excludes: '',
     auto_review_enabled: false,
-    models: ['claude-3-5-sonnet-20241022'],
+    models: ['claude-sonnet-4-6'],
     webhook_secret: '',
   })
 
@@ -68,7 +68,7 @@ export default function ReposPage() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
       setShowForm(false)
-      setForm({ repo_name: '', path_includes: '', path_excludes: '', auto_review_enabled: false, models: ['claude-3-5-sonnet-20241022'], webhook_secret: '' })
+      setForm({ repo_name: '', path_includes: '', path_excludes: '', auto_review_enabled: false, models: ['claude-sonnet-4-6'], webhook_secret: '' })
       await loadRepos()
     } finally {
       setSaving(false)

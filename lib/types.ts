@@ -2,7 +2,7 @@ export type IssueSeverity = 'critical' | 'warning' | 'suggestion' | 'info'
 export type IssueCategory = 'bug' | 'security' | 'performance' | 'maintainability' | 'style'
 export type ReviewVerdict = 'approved' | 'needs_changes' | 'nitpick'
 export type FileChangeType = 'added' | 'modified' | 'deleted' | 'renamed'
-export type ModelId = 'claude-3-5-sonnet-20241022' | 'gpt-4.1' | 'gemini-2.0-flash'
+export type ModelId = 'claude-sonnet-4-6' | 'gpt-4.1' | 'gemini-2.0-flash'
 
 export interface Issue {
   line?: number

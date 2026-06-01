@@ -26,7 +26,7 @@ export function buildConsensus(results: FileReviewResult[]): ConsensusResult {
     return {
       issues: results[0].issues.map((issue) => ({
         ...issue,
-        agreedBy: [results[0].model ?? ('claude-3-5-sonnet-20241022' as ModelId)],
+        agreedBy: [results[0].model ?? ('claude-sonnet-4-6' as ModelId)],
         disagreedBy: [],
         confidence: 'medium',
       })),
@@ -41,7 +41,7 @@ export function buildConsensus(results: FileReviewResult[]): ConsensusResult {
   const issueMap = new Map<string, ConsensusIssue>()
 
   for (const result of results) {
-    const modelId = result.model ?? ('claude-3-5-sonnet-20241022' as ModelId)
+    const modelId = result.model ?? ('claude-sonnet-4-6' as ModelId)
     for (const issue of result.issues) {
       const key = normalizeTitle(issue.title)
       const existing = issueMap.get(key)
@@ -61,7 +61,7 @@ export function buildConsensus(results: FileReviewResult[]): ConsensusResult {
   }
 
   // Mark confidence and which models disagreed
-  const allModelIds = results.map((r) => r.model ?? ('claude-3-5-sonnet-20241022' as ModelId))
+  const allModelIds = results.map((r) => r.model ?? ('claude-sonnet-4-6' as ModelId))
 
   const consensusIssues: ConsensusIssue[] = []
   for (const issue of issueMap.values()) {

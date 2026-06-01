@@ -99,7 +99,7 @@ export async function saveReview(
       info_count: summary.info_count,
       files_reviewed: summary.files_reviewed,
       files_skipped: summary.files_skipped,
-      model_used: 'claude-3-5-sonnet-20241022',
+      model_used: 'claude-sonnet-4-6',
       status: 'complete',
       is_public: false,
     })

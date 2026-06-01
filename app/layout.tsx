@@ -6,6 +6,7 @@ import { getProfile } from '@/lib/supabase/db'
 import { UserMenu } from '@/components/UserMenu'
 import { Providers } from '@/components/Providers'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { LogoMark } from '@/components/LogoMark'
 import { getAppUrl } from '@/lib/app-url'
 import './globals.css'
 
@@ -141,9 +142,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
               <div className="flex items-center gap-7">
                 <Link href="/" className="flex items-center gap-2.5 group">
-                  <div className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-bold text-white shadow-sm shadow-indigo-500/30 transition-shadow group-hover:shadow-indigo-500/50">
-                    P
-                  </div>
+                  <LogoMark size={28} />
                   <span className="font-semibold tracking-tight text-[--foreground]">{APP_NAME}</span>
                   <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[11px] font-medium text-indigo-400 border border-indigo-500/20">
                     beta
@@ -200,7 +199,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <div className="mx-auto max-w-5xl px-5">
               <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex size-5 items-center justify-center rounded bg-gradient-to-br from-indigo-500 to-violet-600 text-[10px] font-bold text-white">P</div>
+                  <LogoMark size={20} />
                   <span className="text-sm font-medium text-[--foreground] opacity-60">{APP_NAME}</span>
                 </div>
                 <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs opacity-40">

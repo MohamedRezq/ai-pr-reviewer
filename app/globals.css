@@ -6,17 +6,17 @@
 :root {
   --background: #ffffff;
   --foreground: #0f0f17;
-  --surface: #f6f6fa;
-  --border: #e2e2ec;
+  --surface: #f5f5fa;
+  --border: #e0e0eb;
   --brand: #4f46e5;
   --brand-foreground: #ffffff;
 }
 
 .dark {
-  --background: #0c0c14;
-  --foreground: #eeeef5;
-  --surface: #12121c;
-  --border: #1c1c2e;
+  --background: #0a0a12;
+  --foreground: #f0f0fa;
+  --surface: #10101c;
+  --border: #1e1e30;
   --brand: #6366f1;
   --brand-foreground: #ffffff;
 }
@@ -38,33 +38,33 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "rlig" 1, "calt" 1;
+  font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
 }
 
-/* Better heading rendering */
 h1, h2, h3, h4 {
-  letter-spacing: -0.025em;
+  letter-spacing: -0.03em;
   text-wrap: balance;
+  font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
 }
 
 /* Subtle scrollbar */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 9999px; }
-.dark ::-webkit-scrollbar-thumb { background: #2a2a3e; }
+.dark ::-webkit-scrollbar-thumb { background: #28283c; }
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
-.dark ::-webkit-scrollbar-thumb:hover { background: #3a3a52; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #38385c; }
 
 @keyframes pulse-subtle {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.65; }
+  50% { opacity: 0.6; }
 }
-.animate-pulse-subtle { animation: pulse-subtle 2s ease-in-out infinite; }
+.animate-pulse-subtle { animation: pulse-subtle 2.5s ease-in-out infinite; }
 
 @keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.animate-fade-in-up { animation: fade-in-up 0.4s ease-out forwards; }
+.animate-fade-in-up { animation: fade-in-up 0.35s ease-out forwards; }
 
 *:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }

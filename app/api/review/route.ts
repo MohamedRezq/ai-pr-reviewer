@@ -144,7 +144,7 @@ function makeStream(opts: StreamOptions): ReadableStream<Uint8Array> {
           return
         }
 
-        const primaryModel = models[0] ?? 'claude-3-5-sonnet-20241022'
+        const primaryModel = models[0] ?? 'claude-sonnet-4-6'
         send({
           type: 'review_start',
           total: toReview.length,
@@ -181,7 +181,7 @@ function makeStream(opts: StreamOptions): ReadableStream<Uint8Array> {
             try {
               let result: FileReviewResult
 
-              if (models.length === 1 && primaryModel === 'claude-3-5-sonnet-20241022') {
+              if (models.length === 1 && primaryModel === 'claude-sonnet-4-6') {
                 // Single-model streaming (typewriter effect)
                 result = await reviewFileStreaming(
                   file.path,
@@ -194,7 +194,7 @@ function makeStream(opts: StreamOptions): ReadableStream<Uint8Array> {
               } else {
                 // Multi-model: run all models in parallel, no token streaming for non-Claude models
                 const modelPromises = models.map(async (modelId) => {
-                  if (modelId === 'claude-3-5-sonnet-20241022') {
+                  if (modelId === 'claude-sonnet-4-6') {
                     return reviewFileStreaming(
                       file.path,
                       language,
@@ -458,7 +458,7 @@ export async function POST(req: Request) {
   const { prUrl, prContext, customRules } = body
   const models: ModelId[] = (body.models && body.models.length > 0)
     ? body.models
-    : ['claude-3-5-sonnet-20241022']
+    : ['claude-sonnet-4-6']
   let { diff } = body
   let meta: { prUrl?: string; prTitle?: string; repo?: string; prNumber?: number } = {}
   let session: Awaited<ReturnType<typeof getUserSession>> = null

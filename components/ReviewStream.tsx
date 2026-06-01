@@ -50,8 +50,8 @@ interface ReviewStreamProps {
 
 const MODEL_OPTIONS: { id: ModelId; label: string; badge: string; color: string }[] = [
   {
-    id: 'claude-3-5-sonnet-20241022',
-    label: 'Claude 3.5 Sonnet',
+    id: 'claude-sonnet-4-6',
+    label: 'Claude Sonnet 4.6',
     badge: 'Recommended',
     color: 'bg-orange-950 text-orange-400 border-orange-900/50',
   },
@@ -112,7 +112,7 @@ export function ReviewStream({ isLoggedIn = false, githubToken, prUrl: initialPr
   const [posting, setPosting] = useState(false)
   const [postedUrl, setPostedUrl] = useState<string | null>(null)
   const [activePrUrl, setActivePrUrl] = useState<string | null>(null)
-  const [selectedModels, setSelectedModels] = useState<ModelId[]>(['claude-3-5-sonnet-20241022'])
+  const [selectedModels, setSelectedModels] = useState<ModelId[]>(['claude-sonnet-4-6'])
   const [showModelPicker, setShowModelPicker] = useState(false)
   const [briefExpanded, setBriefExpanded] = useState(true)
   const readerRef = useRef<ReadableStreamDefaultReader | null>(null)

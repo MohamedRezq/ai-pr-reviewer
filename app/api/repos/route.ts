@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       path_includes = [],
       path_excludes = [],
       auto_review_enabled = false,
-      models = ['claude-3-5-sonnet-20241022'],
+      models = ['claude-sonnet-4-6'],
       webhook_secret,
     } = body
 

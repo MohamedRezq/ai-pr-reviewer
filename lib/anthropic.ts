@@ -1,16 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { FileReviewResult, Issue, ModelId } from './types'
 
-// Pricing per million tokens (as of May 2026)
+// Pricing per million tokens (as of Jun 2026)
 export const CLAUDE_PRICING = {
-  'claude-3-5-sonnet-20241022': { input: 3.0, output: 15.0 },
-  'claude-3-5-haiku-20241022': { input: 0.8, output: 4.0 },
+  'claude-sonnet-4-6': { input: 3.0, output: 15.0 },
+  'claude-haiku-4-5-20251001': { input: 0.8, output: 4.0 },
 }
 
 export function computeClaudeCost(model: string, inputTokens: number, outputTokens: number): number {
   const pricing =
     CLAUDE_PRICING[model as keyof typeof CLAUDE_PRICING] ??
-    CLAUDE_PRICING['claude-3-5-sonnet-20241022']
+    CLAUDE_PRICING['claude-sonnet-4-6']
   return (inputTokens / 1_000_000) * pricing.input + (outputTokens / 1_000_000) * pricing.output
 }
 
@@ -140,7 +140,7 @@ export async function reviewFileStreaming(
   customRules?: string[],
 ): Promise<FileReviewResult> {
   const client = getClient()
-  const model = 'claude-3-5-sonnet-20241022' as ModelId
+  const model = 'claude-sonnet-4-6' as ModelId
   const startMs = Date.now()
 
   let fullText = ''
@@ -204,7 +204,7 @@ export async function reviewFile(
   customRules?: string[],
 ): Promise<FileReviewResult> {
   const client = getClient()
-  const model = 'claude-3-5-sonnet-20241022' as ModelId
+  const model = 'claude-sonnet-4-6' as ModelId
   const startMs = Date.now()
 
   const message = await client.messages.create({
@@ -264,7 +264,7 @@ export async function generateReviewerBrief(
   if (!fileLines) return 'All files look clean. No specific areas need human attention.'
 
   const message = await client.messages.create({
-    model: 'claude-3-5-haiku-20241022',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 256,
     system:
       'You are a senior engineering lead. Write a 2–3 sentence briefing for a human code reviewer. Be specific about which files and lines to focus on. Do not pad with filler.',

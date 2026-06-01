@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prUrl,
-        models: repoConfig.models ?? ['claude-3-5-sonnet-20241022'],
+        models: repoConfig.models ?? ['claude-sonnet-4-6'],
       }),
     })
 
