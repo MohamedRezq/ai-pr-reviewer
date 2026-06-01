@@ -59,8 +59,8 @@ export async function POST(req: NextRequest) {
 
   // Look up repo settings to check if auto-review is enabled
   try {
-    const { createServiceClient } = await import('@/lib/supabase/server')
-    const supabase = await createServiceClient()
+    const { createAdminClient } = await import('@/lib/supabase/admin')
+    const supabase = createAdminClient()
 
     // Find users who have auto-review enabled for this repo
     const { data: repoSettings } = await supabase
@@ -80,7 +80,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Trigger auto-review by calling the review API
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const { getAppUrl } = await import('@/lib/app-url')
+    const baseUrl = getAppUrl()
     const reviewResponse = await fetch(`${baseUrl}/api/review`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

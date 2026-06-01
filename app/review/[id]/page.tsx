@@ -9,7 +9,9 @@ import type { Issue } from '@/lib/types'
 import { CheckCircle2, XCircle, MessageSquare, ArrowLeft, GitBranch, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://getprova.dev'
+import { getAppUrl } from '@/lib/app-url'
+
+const APP_URL = getAppUrl()
 
 interface ReviewDetailPageProps {
   params: Promise<{ id: string }>

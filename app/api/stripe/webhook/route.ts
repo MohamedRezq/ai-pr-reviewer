@@ -4,9 +4,9 @@ import type Stripe from 'stripe'
 
 export const runtime = 'nodejs'
 
-async function getSupabaseServiceClient() {
-  const { createServiceClient } = await import('@/lib/supabase/server')
-  return createServiceClient()
+async function getSupabaseAdminClient() {
+  const { createAdminClient } = await import('@/lib/supabase/admin')
+  return createAdminClient()
 }
 
 export async function POST(req: Request) {
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     return Response.json({ error: `Webhook signature verification failed: ${message}` }, { status: 400 })
   }
 
-  const supabase = await getSupabaseServiceClient()
+  const supabase = await getSupabaseAdminClient()
 
   switch (event.type) {
     case 'checkout.session.completed': {

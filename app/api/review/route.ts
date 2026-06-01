@@ -216,6 +216,12 @@ function makeStream(opts: StreamOptions): ReadableStream<Uint8Array> {
                   .map((r) => r.value)
                   .filter((r): r is FileReviewResult => r !== null)
 
+                if (modelResults.length === 0) {
+                  throw new Error(
+                    'No models could run. Ensure ANTHROPIC_API_KEY is set, or add OPENAI_API_KEY / GOOGLE_AI_API_KEY for extra models.',
+                  )
+                }
+
                 const consensus = buildConsensus(modelResults)
                 result = {
                   ...consensus,

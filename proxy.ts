@@ -37,7 +37,7 @@ export async function proxy(request: NextRequest) {
   const user = data?.claims
 
   const { pathname } = request.nextUrl
-  const protectedPaths = ['/dashboard', '/reviews', '/review', '/settings']
+  const protectedPaths = ['/dashboard', '/reviews', '/review', '/settings', '/coaching']
   const isProtected = protectedPaths.some(
     (p) => pathname === p || pathname.startsWith(p + '/'),
   )

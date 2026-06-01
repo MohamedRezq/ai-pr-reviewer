@@ -1,6 +1,8 @@
 import type { MetadataRoute } from 'next'
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://getprova.dev'
+import { getAppUrl } from '@/lib/app-url'
+
+const APP_URL = getAppUrl()
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
@@ -50,8 +52,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Include public reviews in sitemap
   try {
-    const { createServiceClient } = await import('@/lib/supabase/server')
-    const supabase = await createServiceClient()
+    const { createAdminClient } = await import('@/lib/supabase/admin')
+    const supabase = createAdminClient()
     const { data: publicReviews } = await supabase
       .from('reviews')
       .select('id, created_at')

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/supabase/db'
 import { createCheckoutSession } from '@/lib/stripe'
+import { getAppUrl } from '@/lib/app-url'
 
 export const runtime = 'nodejs'
 
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Already on this plan' }, { status: 400 })
   }
 
-  const origin = req.headers.get('origin') ?? process.env.NEXTAUTH_URL ?? 'http://localhost:3000'
+  const origin = req.headers.get('origin') ?? getAppUrl()
 
   try {
     const url = await createCheckoutSession(

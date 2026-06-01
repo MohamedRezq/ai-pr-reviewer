@@ -6,12 +6,13 @@ import { getProfile } from '@/lib/supabase/db'
 import { UserMenu } from '@/components/UserMenu'
 import { Providers } from '@/components/Providers'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { getAppUrl } from '@/lib/app-url'
 import './globals.css'
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://getprova.dev'
+const APP_URL = getAppUrl()
 const APP_NAME = 'Prova'
 const APP_DESCRIPTION =
   'AI-powered code review that streams results file-by-file. Multi-model consensus from Claude, GPT-4.1, and Gemini. Team coaching, cost transparency, custom rules — no YAML required.'
